@@ -1,11 +1,16 @@
 package htpierretp2web.htpierretp2web.llm;
 
+import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.memory.ChatMemory;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
+import dev.langchain4j.service.AiServices;
+
 import jakarta.enterprise.context.Dependent;
-import jakarta.ws.rs.client.*;
-import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
 
 import java.io.Serializable;
+import java.time.Duration;
 
 /**
  * Gère l'interface avec l'API de Gemini.
@@ -19,50 +24,66 @@ import java.io.Serializable;
  */
 @Dependent
 public class LlmClient implements Serializable {
-    // Clé pour l'API du LLM
-    private final String key;
-    // Client REST. Facilite les échanges avec une API REST.
-    private Client clientRest; // Pour pouvoir le fermer
-    // Représente un endpoint de serveur REST
-    private final WebTarget target;
+
+    // Rôle système choisi par l'utilisateur
+    private String systemRole;
+
+    // Service IA
+    private Assistant assistant;
+
+    // Mémoire de conversation
+    private ChatMemory chatMemory;
 
     public LlmClient() {
         // Récupère la clé secrète pour travailler avec l'API du LLM, mise dans une variable d'environnement
         // du système d'exploitation.
-        this.key = System.getenv("GEMINI_KEY");
+        String key = System.getenv("GEMINI_KEY");
 
         if (key == null) {
             throw new RuntimeException("Clé GEMINI_KEY manquante !");
         }
 
-        // Client REST pour envoyer des requêtes vers les endpoints de l'API du LLM
-        this.clientRest = ClientBuilder.newClient();
-        // Endpoint REST pour envoyer la question à l'API.
-        // L'URL à trouver a été utilisé dans la commande curl pour tester la clé secrète.
-        // Elle se trouve aussi dans le support de cours.
-        this.target = clientRest.target("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent").queryParam("key", key);
-    }
+        // Création du modèle Gemini
+        ChatModel model = GoogleAiGeminiChatModel.builder()
+                .apiKey(key)
+                .modelName("gemini-2.5-flash")
+                .timeout(Duration.ofSeconds(30))
+                .build();
 
+        // Mémoire de conversation
+        this.chatMemory = MessageWindowChatMemory.withMaxMessages(20);
+
+        // Création du service IA
+        this.assistant = AiServices.builder(Assistant.class)
+                .chatModel(model)
+                .chatMemory(chatMemory)
+                .build();
+    }
 
     /**
-     * Envoie une requête à l'API de Gemini.
-     * @param requestEntity le corps de la requête (en JSON).
-     * @return réponse REST de l'API (corps en JSON).
+     * Définit le rôle système.
      */
-    public Response envoyerRequete(Entity requestEntity) {
-        Invocation.Builder request = target.request(MediaType.APPLICATION_JSON_TYPE);
-        // Envoie la requête POST au LLM
-        return request.post(requestEntity);
+    public void setSystemRole(String systemRole) {
+
+        // Sauvegarde du rôle système
+        this.systemRole = systemRole;
+
+        // Nouveau contexte :
+        // on vide la mémoire
+        this.chatMemory.clear();
+
+        // Ajout du rôle système à la mémoire
+        this.chatMemory.add(
+                SystemMessage.from(systemRole)
+        );
     }
 
-    public void closeClient() {
-        this.clientRest.close();
+    /**
+     * Envoie une question au LLM.
+     */
+    public String envoyerQuestion(String question) {
+
+        // Envoi de la question au LLM
+        return assistant.chat(question);
     }
-
-    public String envoyerQuestion(String roleSysteme, String question) {
-        return "Test : " + question;
-    }
-
-
 }
-
