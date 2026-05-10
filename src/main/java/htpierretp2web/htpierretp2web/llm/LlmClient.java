@@ -68,6 +68,9 @@ public class LlmClient implements Serializable {
         // Sauvegarde du rôle système
         this.systemRole = systemRole;
 
+        if (systemRole == null || systemRole.isBlank()) {
+            return;
+        }
         // Nouveau contexte :
         // on vide la mémoire
         this.chatMemory.clear();
@@ -81,9 +84,10 @@ public class LlmClient implements Serializable {
     /**
      * Envoie une question au LLM.
      */
-    public String envoyerQuestion(String question) {
-
-        // Envoi de la question au LLM
+    public String envoyerQuestion(String role, String question) {
+        if (role != null) {
+            setSystemRole(role);
+        }
         return assistant.chat(question);
     }
 }
